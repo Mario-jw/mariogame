@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>초등 기초 영어 플레이랜드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f0fdf4; /* Light green background */
+            touch-action: manipulation;
+            user-select: none;
+            overflow: hidden;
+        }
+        h1, h2, h3, .fredoka {
+            font-family: 'Fredoka One', cursive;
+        }
+        
+        .game-container {
+            max-width: 480px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            height: 100vh;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .screen {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+        }
+        .screen.active {
+            display: flex;
+        }
+
+        /* Buttons and Elements */
+        .btn {
+            transition: transform 0.1s, filter 0.1s;
+            cursor: pointer;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            filter: brightness(0.9);
+        }
+
+        /* Game 1: Train Animations */
+        .train-slot.filled {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .scattered-letter {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .scattered-letter:hover { transform: scale(1.1); }
+
+        /* Game 2: Skewer Conveyor Animations - Full length traversal */
+        @keyframes conveyorMove {
+            0% { left: 100%; }
+            100% { left: -70px; }
+        }
+        .conveyor-belt {
+            background: repeating-linear-gradient( 45deg, #cbd5e1, #cbd5e1 10px, #94a3b8 10px, #94a3b8 20px);
+            border-bottom: 4px solid #64748b;
+        }
+        .moving-letter {
+            position: absolute;
+            animation: conveyorMove linear forwards;
+            cursor: pointer;
+            z-index: 20;
+        }
+
+        .skewer-card {
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .skewer-card.selected {
+            border-color: #f59e0b;
+            transform: scale(1.05);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+        }
+        
+        /* Game 3: Basketball Animations */
+        .ball {
+            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+            z-index: 50;
+        }
+        .hoop-target { cursor: pointer; }
+        
+        /* Game 4: Cards */
+        .card-inner {
+            transition: transform 0.5s;
+            transform-style: preserve-3d;
+        }
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            backface-visibility: hidden;
+            position: absolute;
+            top:0; left:0; width:100%; height:100%;
+        }
+        .card-front { transform: rotateY(180deg); }
+
+        /* General Utilities */
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+        }
+        .shake-anim { animation: shake 0.4s; }
+        .pop-anim { animation: popIn 0.5s; }
+
+        /* Custom Modal */
+        #modal-overlay {
+            display: none;
+            backdrop-filter: blur(4px);
+        }
+        #modal-overlay.active { display: flex; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    
+    <!-- Splash Screen -->
+    <div id="screen-splash" class="screen active bg-green-200 justify-center items-center z-50">
+        <div class="text-center pop-anim">
+            <h1 class="text-5xl text-green-700 mb-6 drop-shadow-md">ABC<br>Playland!</h1>
+            <div class="text-6xl mb-8">🎡🚂🍢🏀</div>
+            <button onclick="startGameApp()" class="btn bg-yellow-400 text-yellow-900 fredoka text-3xl py-4 px-10 rounded-full border-b-8 border-yellow-600 shadow-xl">
+                시작하기! (START)
+            </button>
+            <p class="mt-4 text-gray-600 font-bold">소리를 켜주세요 🎵</p>
+        </div>
+    </div>
+
+    <!-- Main Menu Screen -->
+    <div id="screen-menu" class="screen bg-blue-100 p-4">
+        <h1 class="text-4xl text-center text-blue-800 my-6 drop-shadow-sm">재미있는 영어 게임</h1>
+        <div class="grid grid-cols-1 gap-4 flex-1 pb-10 overflow-y-auto">
+            <!-- Game 1 Button -->
+            <div onclick="openGame('train')" class="btn bg-white rounded-3xl p-4 shadow-lg border-b-8 border-gray-200 flex items-center space-x-4">
+                <div class="text-5xl bg-blue-100 p-3 rounded-2xl">🚂</div>
+                <div>
+                    <h2 class="text-2xl text-blue-600">알파벳 기차</h2>
+                    <p class="text-gray-500 font-bold text-sm">순서대로 알파벳을 연결해요!</p>
+                </div>
+            </div>
+            <!-- Game 2 Button -->
+            <div onclick="openGame('skewer')" class="btn bg-white rounded-3xl p-4 shadow-lg border-b-8 border-gray-200 flex items-center space-x-4">
+                <div class="text-5xl bg-orange-100 p-3 rounded-2xl">🍢</div>
+                <div>
+                    <h2 class="text-2xl text-orange-600">알파벳 꼬치구이</h2>
+                    <p class="text-gray-500 font-bold text-sm">여러 꼬치에 대소문자를 알맞게 짝지어 구워요!</p>
+                </div>
+            </div>
+            <!-- Game 3 Button -->
+            <div onclick="openGame('basketball')" class="btn bg-white rounded-3xl p-4 shadow-lg border-b-8 border-gray-200 flex items-center space-x-4">
+                <div class="text-5xl bg-green-100 p-3 rounded-2xl">🏀</div>
+                <div>
+                    <h2 class="text-2xl text-green-600">단어 슛 농구</h2>
+                    <p class="text-gray-500 font-bold text-sm">원어민 발음을 듣고 맞는 그림으로 슛!</p>
+                </div>
+            </div>
+            <!-- Game 4 Button -->
+            <div onclick="openGame('memory')" class="btn bg-white rounded-3xl p-4 shadow-lg border-b-8 border-gray-200 flex items-center space-x-4">
+                <div class="text-5xl bg-pink-100 p-3 rounded-2xl">🃏</div>
+                <div>
+                    <h2 class="text-2xl text-pink-600">짝맞추기 카드</h2>
+                    <p class="text-gray-500 font-bold text-sm">단어와 그림의 짝을 찾아요!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-train" class="screen bg-cyan-50">
+        <div class="flex justify-between items-center p-4 bg-white shadow-md z-10">
+            <button onclick="goToMenu()" class="btn text-2xl bg-gray-200 w-10 h-10 rounded-full flex justify-center items-center">🏠</button>
+            <div class="fredoka text-xl text-blue-600" id="train-score">SCORE: 0</div>
+            <div class="w-10"></div>
+        </div>
+        
+        <div class="flex-1 flex flex-col justify-between p-4 relative overflow-hidden">
+            <div class="text-center mt-2">
+                <h2 class="text-2xl text-cyan-800">알파벳 순서 맞추기</h2>
+                <p class="text-cyan-600 font-bold text-xs sm:text-sm">앞뒤 알파벳 힌트를 보고 중간 알파벳 5개를 완성해보세요!</p>
+            </div>
+            
+            <div class="flex items-center justify-center my-4 py-2 w-full">
+                <div class="text-3xl sm:text-4xl mr-1 shrink-0 drop-shadow-md">🚂</div>
+                <div id="train-slots" class="flex gap-1 sm:gap-1.5 justify-center items-center w-full max-w-full"></div>
+            </div>
+
+            <div id="train-choices" class="grid grid-cols-5 gap-3 bg-white p-4 rounded-3xl shadow-inner border-t-4 border-cyan-100"></div>
+        </div>
+    </div>
+
+    <!-- Game 2: Skewer Screen -->
+    <div id="screen-skewer" class="screen bg-orange-50">
+        <div class="flex justify-between items-center p-4 bg-white shadow-md z-10">
+            <button onclick="goToMenu()" class="btn text-2xl bg-gray-200 w-10 h-10 rounded-full flex justify-center items-center">🏠</button>
+            <div class="fredoka text-xl text-orange-600" id="skewer-score">SCORE: 0</div>
+            <div class="w-10"></div>
+        </div>
+
+        <div class="text-center mt-2 z-10 px-2">
+            <h2 class="text-2xl text-orange-800">대소문자 꼬치구이</h2>
+            <p class="text-orange-600 font-bold text-xs sm:text-sm">지나가는 알파벳을 터치해 선택된 꼬치에 꽂으세요!</p>
+        </div>
+
+        <!-- Conveyor Belt (Traverse entire width) -->
+        <div class="relative w-full h-20 mt-4 conveyor-belt overflow-hidden" id="conveyor-container"></div>
+
+        <!-- Grill Area with 3 Skewers -->
+        <div class="flex-1 bg-gray-800 mt-4 rounded-t-3xl relative p-3 flex flex-col items-center justify-between border-t-8 border-gray-900 shadow-[inset_0_10px_20px_rgba(0,0,0,0.5)]">
+            <!-- Grill Lines Background -->
+            <div class="absolute top-2 w-full flex justify-around opacity-30 h-full pointer-events-none">
+                <div class="w-1 bg-orange-500 rounded"></div>
+                <div class="w-1 bg-orange-500 rounded"></div>
+                <div class="w-1 bg-orange-500 rounded"></div>
+                <div class="w-1 bg-orange-500 rounded"></div>
+            </div>
+
+            <div class="text-xs font-bold text-yellow-300 z-10">꼬치를 터치하여 선택할 수 있어요!</div>
+
+            <!-- 3 Skewers Grill Grid -->
+            <div class="grid grid-cols-3 gap-3 w-full max-w-sm z-10 my-auto">
+                <!-- Skewer 0 -->
+                <div id="skewer-card-0" onclick="selectSkewer(0)" class="skewer-card bg-yellow-900/60 p-2 rounded-2xl border-4 border-yellow-700/50 flex flex-col items-center space-y-2 relative">
+                    <div class="absolute -top-3 bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full fredoka">1번</div>
+                    <div class="relative w-10 h-44 bg-amber-100/20 rounded-full flex flex-col items-center justify-end pb-3 space-y-2 border border-amber-300/30">
+                        <div class="absolute top-0 w-2 h-full bg-amber-700 rounded-full -z-10"></div>
+                        <div id="skewer-0-slot-1" class="w-12 h-12 rounded-xl border-2 border-dashed border-yellow-300 flex justify-center items-center text-2xl fredoka bg-white/80 shadow"></div>
+                        <div id="skewer-0-slot-0" class="w-12 h-12 rounded-xl border-2 border-dashed border-yellow-300 flex justify-center items-center text-2xl fredoka bg-white/80 shadow"></div>
+                    </div>
+                    <button onclick="event.stopPropagation(); clearSkewer(0)" class="text-xs bg-red-500 text-white px-2 py-1 rounded-lg font-bold btn shadow">비우기</button>
+                </div>
+
+                <!-- Skewer 1 -->
+                <div id="skewer-card-1" onclick="selectSkewer(1)" class="skewer-card bg-yellow-900/60 p-2 rounded-2xl border-4 border-yellow-700/50 flex flex-col items-center space-y-2 relative">
+                    <div class="absolute -top-3 bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full fredoka">2번</div>
+                    <div class="relative w-10 h-44 bg-amber-100/20 rounded-full flex flex-col items-center justify-end pb-3 space-y-2 border border-amber-300/30">
+                        <div class="absolute top-0 w-2 h-full bg-amber-700 rounded-full -z-10"></div>
+                        <div id="skewer-1-slot-1" class="w-12 h-12 rounded-xl border-2 border-dashed border-yellow-300 flex justify-center items-center text-2xl fredoka bg-white/80 shadow"></div>
+                        <div id="skewer-1-slot-0" class="w-12 h-12 rounded-xl border-2 border-dashed border-yellow-300 flex justify-center items-center text-2xl fredoka bg-white/80 shadow"></div>
+                    </div>
+                    <button onclick="event.stopPropagation(); clearSkewer(1)" class="text-xs bg-red-500 text-white px-2 py-1 rounded-lg font-bold btn shadow">비우기</button>
+                </div>
+
+                <!-- Skewer 2 -->
+                <div id="skewer-card-2" onclick="selectSkewer(2)" class="skewer-card bg-yellow-900/60 p-2 rounded-2xl border-4 border-yellow-700/50 flex flex-col items-center space-y-2 relative">
+                    <div class="absolute -top-3 bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full fredoka">3번</div>
+                    <div class="relative w-10 h-44 bg-amber-100/20 rounded-full flex flex-col items-center justify-end pb-3 space-y-2 border border-amber-300/30">
+                        <div class="absolute top-0 w-2 h-full bg-amber-700 rounded-full -z-10"></div>
+                        <div id="skewer-2-slot-1" class="w-12 h-12 rounded-xl border-2 border-dashed border-yellow-300 flex justify-center items-center text-2xl fredoka bg-white/80 shadow"></div>
+                        <div id="skewer-2-slot-0" class="w-12 h-12 rounded-xl border-2 border-dashed border-yellow-300 flex justify-center items-center text-2xl fredoka bg-white/80 shadow"></div>
+                    </div>
+                    <button onclick="event.stopPropagation(); clearSkewer(2)" class="text-xs bg-red-500 text-white px-2 py-1 rounded-lg font-bold btn shadow">비우기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game 3: Basketball Screen -->
+    <div id="screen-basketball" class="screen bg-green-50">
+        <div class="flex justify-between items-center p-4 bg-white shadow-md z-10 relative">
+            <button onclick="goToMenu()" class="btn text-2xl bg-gray-200 w-10 h-10 rounded-full flex justify-center items-center">🏠</button>
+            <div class="fredoka text-xl text-green-600" id="basket-score">SCORE: 0</div>
+            <div class="w-10"></div>
+        </div>
+
+        <div class="flex-1 relative bg-orange-100 overflow-hidden">
+            <!-- Court Lines -->
+            <div class="absolute bottom-0 w-full h-1/2 border-t-4 border-white flex justify-center">
+                <div class="w-32 h-32 rounded-full border-4 border-white mt-[-64px]"></div>
+            </div>
+
+            <!-- Word Display with Audio Replay Button -->
+            <div class="absolute top-6 w-full text-center z-10 px-4">
+                <div class="inline-flex items-center space-x-3 bg-white px-6 py-2 rounded-3xl shadow-lg border-b-4 border-blue-200">
+                    <span id="basket-word" class="text-3xl sm:text-4xl fredoka text-blue-700">APPLE</span>
+                    <button onclick="playCurrentWordAudio()" class="btn text-2xl bg-blue-100 hover:bg-blue-200 w-10 h-10 rounded-full flex items-center justify-center shadow">
+                        🔊
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hoops -->
+            <div class="absolute top-28 w-full flex justify-around px-4 z-10">
+                <div onclick="shootBall('left')" class="hoop-target flex flex-col items-center btn">
+                    <div id="hoop-img-left" class="text-6xl bg-white w-24 h-24 rounded-2xl shadow flex justify-center items-center border-4 border-orange-500 relative">
+                        🍎
+                        <div class="absolute -bottom-4 text-3xl">🥅</div>
+                    </div>
+                </div>
+                <div onclick="shootBall('right')" class="hoop-target flex flex-col items-center btn">
+                    <div id="hoop-img-right" class="text-6xl bg-white w-24 h-24 rounded-2xl shadow flex justify-center items-center border-4 border-orange-500 relative">
+                        🐶
+                        <div class="absolute -bottom-4 text-3xl">🥅</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Basketball -->
+            <div id="basketball" class="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-6xl drop-shadow-xl ball">
+                🏀
+            </div>
+        </div>
+    </div>
+
+    <!-- Game 4: Memory Game Screen -->
+    <div id="screen-memory" class="screen bg-pink-50">
+        <div class="flex justify-between items-center p-4 bg-white shadow-md z-10">
+            <button onclick="goToMenu()" class="btn text-2xl bg-gray-200 w-10 h-10 rounded-full flex justify-center items-center">🏠</button>
+            <div class="fredoka text-xl text-pink-600" id="memory-score">PAIRS: 0 / 6</div>
+            <div class="w-10"></div>
+        </div>
+
+        <div class="flex-1 flex flex-col items-center pt-6 px-4">
+            <h2 class="text-2xl text-pink-800 mb-6">그림 & 영단어 짝맞추기</h2>
+            <div id="memory-grid" class="grid grid-cols-3 gap-3 w-full max-w-[350px]"></div>
+        </div>
+    </div>
+
+    <!-- Modal Dialog -->
+    <div id="modal-overlay" class="absolute top-0 left-0 w-full h-full bg-black/40 z-50 justify-center items-center p-4">
+        <div class="bg-white rounded-3xl p-8 text-center shadow-2xl max-w-sm w-full transform transition-transform pop-anim" id="modal-content">
+            <div id="modal-icon" class="text-7xl mb-4">🌟</div>
+            <h2 id="modal-title" class="text-3xl fredoka text-blue-600 mb-2">Great Job!</h2>
+            <p id="modal-desc" class="text-gray-600 font-bold mb-6">참 잘했어요!</p>
+            <button onclick="closeModal()" class="btn bg-blue-500 text-white fredoka text-xl py-3 px-8 rounded-full shadow-md border-b-4 border-blue-700 w-full">
+                계속하기 (Continue)
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Vocabulary Data
+    const VOCAB = [
+        { word: 'APPLE', emoji: '🍎' }, { word: 'DOG', emoji: '🐶' },
+        { word: 'CAT', emoji: '🐱' }, { word: 'CAR', emoji: '🚗' },
+        { word: 'SUN', emoji: '☀️' }, { word: 'STAR', emoji: '⭐' },
+        { word: 'TREE', emoji: '🌳' }, { word: 'BOOK', emoji: '📖' },
+        { word: 'FISH', emoji: '🐟' }, { word: 'BIRD', emoji: '🐦' },
+        { word: 'MILK', emoji: '🥛' }, { word: 'CAKE', emoji: '🍰' },
+        { word: 'PIG', emoji: '🐷' }, { word: 'COW', emoji: '🐮' },
+        { word: 'BUS', emoji: '🚌' }
+    ];
+
+    const ALPHABETS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    // Audio & Speech System
+    let synth, errorSynth;
+    function initAudio() {
+        if(!synth) {
+            synth = new Tone.PolySynth(Tone.Synth).toDestination();
+            errorSynth = new Tone.MembraneSynth().toDestination();
+        }
+    }
+
+    // TTS Pronunciation helper
+    function speakWord(text) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel(); // cancel ongoing speech
+            const utterance = new SpeechSynthesisUtterance(text.toLowerCase());
+            utterance.lang = 'en-US';
+            utterance.rate = 0.8; // Friendly speech rate for kids
+            utterance.pitch = 1.1;
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    function playSound(type) {
+        if(Tone.context.state !== 'running') Tone.context.resume();
+        const now = Tone.now();
+        switch(type) {
+            case 'pop':
+                synth.triggerAttackRelease("C6", "16n", now);
+                break;
+            case 'success':
+                synth.triggerAttackRelease(["C5", "E5", "G5"], "8n", now);
+                break;
+            case 'error':
+                errorSynth.triggerAttackRelease("C2", "8n", now);
+                break;
+            case 'cheer':
+                synth.triggerAttackRelease(["E5", "G5", "C6"], "4n", now);
+                break;
+            case 'slide':
+                synth.triggerAttackRelease("G4", "16n", now);
+                break;
+        }
+    }
+
+    let currentInterval = null;
+
+    function startGameApp() {
+        initAudio();
+        Tone.start();
+        playSound('success');
+        switchScreen('screen-menu');
+    }
+
+    function switchScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+        
+        if(currentInterval) {
+            clearInterval(currentInterval);
+            currentInterval = null;
+        }
+    }
+
+    function goToMenu() {
+        if('speechSynthesis' in window) window.speechSynthesis.cancel();
+        playSound('pop');
+        switchScreen('screen-menu');
+    }
+
+    function openGame(gameName) {
+        playSound('pop');
+        switchScreen(`screen-${gameName}`);
+        
+        if(gameName === 'train') initTrainGame();
+        else if(gameName === 'skewer') initSkewerGame();
+        else if(gameName === 'basketball') initBasketGame();
+        else if(gameName === 'memory') initMemoryGame();
+    }
+
+    // Modal Manager
+    let modalCallback = null;
+    function showModal(title, desc, icon, callback) {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-desc').innerText = desc;
+        document.getElementById('modal-icon').innerText = icon;
+        document.getElementById('modal-overlay').classList.add('active');
+        modalCallback = callback;
+    }
+
+    function closeModal() {
+        playSound('pop');
+        document.getElementById('modal-overlay').classList.remove('active');
+        if(modalCallback) modalCallback();
+    }
+
+    function triggerShake(elementId) {
+        const el = document.getElementById(elementId);
+        if(!el) return;
+        el.classList.remove('shake-anim');
+        void el.offsetWidth;
+        el.classList.add('shake-anim');
+    }
+
+    let trainState = { score: 0, fullSequence: [], quizSequence: [], currentIndex: 0 };
+    
+    function initTrainGame() {
+        trainState.currentIndex = 0;
+        document.getElementById('train-score').innerText = `SCORE: ${trainState.score}`;
+        
+        // Pick 7 consecutive letters: 1 hint at front, 5 quiz letters, 1 hint at back
+        const startIdx = Math.floor(Math.random() * (26 - 7));
+        const full = ALPHABETS.substring(startIdx, startIdx + 7).split('');
+        trainState.fullSequence = full;
+        trainState.quizSequence = full.slice(1, 6); // 5 quiz letters
+        
+        renderTrain();
+        renderTrainChoices();
+    }
+
+    function renderTrain() {
+        const slotsContainer = document.getElementById('train-slots');
+        slotsContainer.innerHTML = '';
+        
+        // Render 7 train cars: [Hint Front, Quiz 1, Quiz 2, Quiz 3, Quiz 4, Quiz 5, Hint Back]
+        for(let i = 0; i < 7; i++) {
+            const slot = document.createElement('div');
+            
+            let isFilled = false;
+            let displayChar = '?';
+            let isHint = false;
+
+            if (i === 0) {
+                isFilled = true;
+                displayChar = trainState.fullSequence[0];
+                isHint = true;
+            } else if (i === 6) {
+                isFilled = true;
+                displayChar = trainState.fullSequence[6];
+                isHint = true;
+            } else {
+                const quizIdx = i - 1;
+                if (quizIdx < trainState.currentIndex) {
+                    isFilled = true;
+                    displayChar = trainState.quizSequence[quizIdx];
+                }
+            }
+
+            const slotColorClass = isHint 
+                ? 'bg-amber-400 text-amber-950 border-amber-600 font-bold shadow-md' 
+                : (isFilled ? 'bg-cyan-500 text-white border-cyan-700 filled' : 'bg-white border-dashed border-cyan-300 text-transparent');
+
+            // Responsive slot sizing to fit all 7 cars neatly across small and large screens
+            slot.className = `w-9 h-12 sm:w-12 sm:h-16 rounded-lg sm:rounded-xl border-2 sm:border-4 flex justify-center items-center text-lg sm:text-2xl fredoka shrink ${slotColorClass}`;
+            slot.innerText = displayChar;
+            
+            const wheels = `<div class="absolute -bottom-1.5 sm:-bottom-2 w-full flex justify-around px-0.5"><div class="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 bg-gray-800 rounded-full"></div><div class="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 bg-gray-800 rounded-full"></div></div>`;
+            slot.style.position = 'relative';
+            if (isFilled) slot.innerHTML += wheels;
+
+            slotsContainer.appendChild(slot);
+        }
+    }
+
+    function renderTrainChoices() {
+        const choicesContainer = document.getElementById('train-choices');
+        choicesContainer.innerHTML = '';
+        
+        let choices = [...trainState.quizSequence];
+        choices.sort(() => Math.random() - 0.5);
+
+        choices.forEach(letter => {
+            const btn = document.createElement('div');
+            btn.className = `scattered-letter bg-gradient-to-b from-yellow-100 to-yellow-300 border-b-4 border-yellow-500 rounded-2xl h-16 flex justify-center items-center text-3xl fredoka text-yellow-800 shadow-sm`;
+            btn.innerText = letter;
+            btn.onclick = () => handleTrainClick(letter, btn);
+            choicesContainer.appendChild(btn);
+        });
+    }
+
+    function handleTrainClick(letter, btnElement) {
+        const expectedLetter = trainState.quizSequence[trainState.currentIndex];
+        
+        if(letter === expectedLetter) {
+            playSound('success');
+            trainState.currentIndex++;
+            btnElement.style.visibility = 'hidden';
+            renderTrain();
+            
+            if(trainState.currentIndex === 5) {
+                trainState.score += 10;
+                document.getElementById('train-score').innerText = `SCORE: ${trainState.score}`;
+                setTimeout(() => {
+                    playSound('cheer');
+                    showModal('Perfect!', '힌트를 확인하며 기차를 완벽히 연결했어요!', '🚂', initTrainGame);
+                }, 500);
+            }
+        } else {
+            playSound('error');
+            triggerShake('train-choices');
+            btnElement.classList.add('bg-red-200');
+            setTimeout(() => btnElement.classList.remove('bg-red-200'), 300);
+        }
+    }
+
+    // Game 2: Skewer State with 3 Skewers
+    let skewerState = { 
+        score: 0, 
+        selectedSkewer: 0, 
+        skewers: [[], [], []] 
+    };
+    
+    function initSkewerGame() {
+        skewerState.score = 0;
+        skewerState.selectedSkewer = 0;
+        skewerState.skewers = [[], [], []];
+        document.getElementById('skewer-score').innerText = `SCORE: 0`;
+        document.getElementById('conveyor-container').innerHTML = '';
+        updateSkewerUI();
+
+        if(currentInterval) clearInterval(currentInterval);
+        currentInterval = setInterval(spawnConveyorLetter, 1600);
+    }
+
+    function selectSkewer(index) {
+        playSound('pop');
+        skewerState.selectedSkewer = index;
+        updateSkewerUI();
+    }
+
+    function spawnConveyorLetter() {
+        if(!document.getElementById('screen-skewer').classList.contains('active')) return;
+        
+        const container = document.getElementById('conveyor-container');
+        const letterDiv = document.createElement('div');
+        
+        // Random uppercase or lowercase letter
+        const char = ALPHABETS[Math.floor(Math.random() * 26)];
+        const isUpper = Math.random() > 0.5;
+        const displayChar = isUpper ? char : char.toLowerCase();
+        
+        const colors = ['bg-pink-400', 'bg-blue-400', 'bg-green-400', 'bg-purple-400', 'bg-amber-400', 'bg-rose-400'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+
+        letterDiv.className = `moving-letter ${color} text-white w-14 h-14 rounded-full flex justify-center items-center text-3xl fredoka shadow-md border-b-4 border-black/20`;
+        letterDiv.innerText = displayChar;
+        letterDiv.style.top = '10px';
+        
+        // Duration: 9 to 12 seconds across full width (Slowed down for children)
+        const duration = 9 + Math.random() * 3;
+        letterDiv.style.animationDuration = `${duration}s`;
+
+        letterDiv.onclick = () => grabLetterForSkewer(displayChar, letterDiv);
+
+        container.appendChild(letterDiv);
+
+        setTimeout(() => {
+            if(container.contains(letterDiv)) letterDiv.remove();
+        }, duration * 1000);
+    }
+
+    function grabLetterForSkewer(char, element) {
+        let skewerIdx = skewerState.selectedSkewer;
+        
+        // If selected skewer is full, auto select first non-full skewer
+        if(skewerState.skewers[skewerIdx].length >= 2) {
+            const openIdx = skewerState.skewers.findIndex(s => s.length < 2);
+            if(openIdx !== -1) {
+                skewerIdx = openIdx;
+                skewerState.selectedSkewer = openIdx;
+            } else {
+                playSound('error');
+                triggerShake(`skewer-card-${skewerIdx}`);
+                return; // All skewers full
+            }
+        }
+        
+        playSound('pop');
+        skewerState.skewers[skewerIdx].push(char);
+        element.remove();
+        updateSkewerUI();
+
+        if(skewerState.skewers[skewerIdx].length === 2) {
+            checkSkewerMatch(skewerIdx);
+        }
+    }
+
+    function updateSkewerUI() {
+        for(let s = 0; s < 3; s++) {
+            const card = document.getElementById(`skewer-card-${s}`);
+            if(s === skewerState.selectedSkewer) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+
+            const items = skewerState.skewers[s];
+            for(let slot = 0; slot < 2; slot++) {
+                const slotEl = document.getElementById(`skewer-${s}-slot-${slot}`);
+                const char = items[slot] || '';
+                slotEl.innerText = char;
+                slotEl.className = `w-12 h-12 rounded-xl border-2 flex justify-center items-center text-2xl fredoka transition-all ${
+                    char ? 'bg-orange-400 text-white border-orange-600 shadow' : 'border-dashed border-yellow-300 bg-white/80'
+                }`;
+            }
+        }
+    }
+
+    function clearSkewer(index) {
+        playSound('slide');
+        skewerState.skewers[index] = [];
+        updateSkewerUI();
+    }
+
+    function checkSkewerMatch(skewerIdx) {
+        const items = skewerState.skewers[skewerIdx];
+        const item1 = items[0];
+        const item2 = items[1];
+        
+        // Matching condition: same letter, one uppercase and one lowercase
+        const isMatch = (item1.toLowerCase() === item2.toLowerCase()) && (item1 !== item2);
+
+        setTimeout(() => {
+            if(isMatch) {
+                playSound('success');
+                skewerState.score += 10;
+                document.getElementById('skewer-score').innerText = `SCORE: ${skewerState.score}`;
+                
+                const card = document.getElementById(`skewer-card-${skewerIdx}`);
+                card.classList.add('pop-anim');
+                setTimeout(() => card.classList.remove('pop-anim'), 500);
+
+                if(skewerState.score % 50 === 0 && skewerState.score > 0) {
+                    playSound('cheer');
+                    showModal('Yummy!', '맛있는 꼬치를 많이 만들었어요!', '🍢', null);
+                }
+            } else {
+                playSound('error');
+                triggerShake(`skewer-card-${skewerIdx}`);
+            }
+            skewerState.skewers[skewerIdx] = [];
+            updateSkewerUI();
+        }, 400);
+    }
+
+    let basketState = { score: 0, currentWord: null, isAnimating: false };
+
+    function initBasketGame() {
+        basketState.isAnimating = false;
+        document.getElementById('basket-score').innerText = `SCORE: ${basketState.score}`;
+        resetBallPosition();
+        loadNextBasketWord();
+    }
+
+    function resetBallPosition() {
+        const ball = document.getElementById('basketball');
+        ball.style.transform = 'translate(-50%, 0) scale(1)';
+        ball.style.top = 'auto';
+        ball.style.bottom = '40px';
+        ball.style.left = '50%';
+        ball.style.opacity = '1';
+    }
+
+    function loadNextBasketWord() {
+        const target = VOCAB[Math.floor(Math.random() * VOCAB.length)];
+        basketState.currentWord = target;
+        document.getElementById('basket-word').innerText = target.word;
+
+        // Pronounce word out loud
+        setTimeout(() => speakWord(target.word), 300);
+
+        let wrongTarget;
+        do {
+            wrongTarget = VOCAB[Math.floor(Math.random() * VOCAB.length)];
+        } while(wrongTarget.word === target.word);
+
+        const putCorrectLeft = Math.random() > 0.5;
+        
+        const leftHoop = document.getElementById('hoop-img-left');
+        const rightHoop = document.getElementById('hoop-img-right');
+
+        leftHoop.childNodes[0].nodeValue = putCorrectLeft ? target.emoji + " " : wrongTarget.emoji + " ";
+        rightHoop.childNodes[0].nodeValue = putCorrectLeft ? wrongTarget.emoji + " " : target.emoji + " ";
+        
+        leftHoop.dataset.correct = putCorrectLeft;
+        rightHoop.dataset.correct = !putCorrectLeft;
+    }
+
+    function playCurrentWordAudio() {
+        playSound('pop');
+        if(basketState.currentWord) {
+            speakWord(basketState.currentWord.word);
+        }
+    }
+
+    function shootBall(side) {
+        if(basketState.isAnimating) return;
+        basketState.isAnimating = true;
+        playSound('slide');
+
+        const ball = document.getElementById('basketball');
+        const hoopImg = document.getElementById(`hoop-img-${side}`);
+        const isCorrect = hoopImg.dataset.correct === 'true';
+
+        const hoopRect = hoopImg.getBoundingClientRect();
+        const containerRect = document.getElementById('screen-basketball').getBoundingClientRect();
+        
+        const targetY = hoopRect.top - containerRect.top;
+        const targetX = side === 'left' ? '25%' : '75%';
+
+        ball.style.bottom = 'auto';
+        ball.style.top = `${targetY}px`;
+        ball.style.left = targetX;
+        ball.style.transform = 'translate(-50%, -50%) scale(0.5)';
+
+        setTimeout(() => {
+            if(isCorrect) {
+                playSound('success');
+                basketState.score += 10;
+                document.getElementById('basket-score').innerText = `SCORE: ${basketState.score}`;
+                
+                ball.style.top = `${targetY + 100}px`;
+                ball.style.opacity = '0';
+                
+                setTimeout(() => {
+                    if(basketState.score % 50 === 0 && basketState.score > 0) {
+                        playSound('cheer');
+                        showModal('Nice Shot!', '농구왕이네요!', '🏀', () => {
+                            resetBallPosition();
+                            loadNextBasketWord();
+                            basketState.isAnimating = false;
+                        });
+                    } else {
+                        resetBallPosition();
+                        loadNextBasketWord();
+                        basketState.isAnimating = false;
+                    }
+                }, 500);
+
+            } else {
+                playSound('error');
+                triggerShake(`hoop-img-${side}`);
+                ball.style.top = `${targetY + 50}px`;
+                ball.style.left = '50%';
+                ball.style.transform = 'translate(-50%, -50%) scale(0.8)';
+                
+                setTimeout(() => {
+                    resetBallPosition();
+                    basketState.isAnimating = false;
+                }, 500);
+            }
+        }, 600);
+    }
+
+    let memoryState = { pairsFound: 0, flippedCards: [], lockBoard: false };
+
+    function initMemoryGame() {
+        memoryState.pairsFound = 0;
+        memoryState.flippedCards = [];
+        memoryState.lockBoard = false;
+        document.getElementById('memory-score').innerText = `PAIRS: 0 / 6`;
+        
+        const grid = document.getElementById('memory-grid');
+        grid.innerHTML = '';
+
+        let shuffledVocab = [...VOCAB].sort(() => Math.random() - 0.5).slice(0, 6);
+        
+        let cardData = [];
+        shuffledVocab.forEach((v, index) => {
+            cardData.push({ type: 'word', content: v.word, id: index });
+            cardData.push({ type: 'emoji', content: v.emoji, id: index });
+        });
+
+        cardData.sort(() => Math.random() - 0.5);
+
+        cardData.forEach((data, index) => {
+            const cardWrap = document.createElement('div');
+            cardWrap.className = 'w-24 h-24 relative perspective-1000 btn card';
+            cardWrap.dataset.id = data.id;
+            cardWrap.dataset.word = data.type === 'word' ? data.content : '';
+            cardWrap.dataset.index = index;
+            cardWrap.onclick = () => flipCard(cardWrap);
+
+            cardWrap.innerHTML = `
+                <div class="card-inner w-full h-full relative">
+                    <div class="card-front bg-white rounded-2xl shadow-md border-b-4 border-gray-200 flex justify-center items-center p-2 text-center absolute w-full h-full">
+                        <span class="${data.type === 'word' ? 'text-xl fredoka text-blue-700' : 'text-5xl'}">${data.content}</span>
+                    </div>
+                    <div class="card-back bg-pink-400 rounded-2xl shadow-md border-b-4 border-pink-600 flex justify-center items-center absolute w-full h-full">
+                        <span class="text-3xl text-white">?</span>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(cardWrap);
+        });
+    }
+
+    function flipCard(card) {
+        if(memoryState.lockBoard) return;
+        if(card.classList.contains('flipped')) return;
+
+        playSound('slide');
+        card.classList.add('flipped');
+        
+        // Speak word if card is a word card
+        if(card.dataset.word) {
+            speakWord(card.dataset.word);
+        }
+
+        memoryState.flippedCards.push(card);
+
+        if(memoryState.flippedCards.length === 2) {
+            checkForCardMatch();
+        }
+    }
+
+    function checkForCardMatch() {
+        memoryState.lockBoard = true;
+        const [card1, card2] = memoryState.flippedCards;
+        const isMatch = card1.dataset.id === card2.dataset.id;
+
+        if(isMatch) {
+            setTimeout(() => {
+                playSound('success');
+                card1.style.visibility = 'hidden';
+                card2.style.visibility = 'hidden';
+                memoryState.pairsFound++;
+                document.getElementById('memory-score').innerText = `PAIRS: ${memoryState.pairsFound} / 6`;
+                resetMemoryBoard();
+
+                if(memoryState.pairsFound === 6) {
+                    playSound('cheer');
+                    showModal('You Won!', '모든 짝을 다 찾았어요!', '🏆', initMemoryGame);
+                }
+            }, 800);
+        } else {
+            setTimeout(() => {
+                playSound('error');
+                card1.classList.remove('flipped');
+                card2.classList.remove('flipped');
+                resetMemoryBoard();
+            }, 1000);
+        }
+    }
+
+    function resetMemoryBoard() {
+        memoryState.flippedCards = [];
+        memoryState.lockBoard = false;
+    }
+
+</script>
+</body>
+</html>
